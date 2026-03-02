@@ -1,10 +1,18 @@
 "use client";
 
+import { MoreHorizontal, Shield, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -44,7 +52,10 @@ type AdminUsersManagerProps = {
 export function AdminUsersManager({ users }: AdminUsersManagerProps) {
   const router = useRouter();
   const [isCreating, startCreateTransition] = useTransition();
-  const [promotingUserId, setPromotingUserId] = useState<string | null>(null);
+  const [activeUserId, setActiveUserId] = useState<string | null>(null);
+  const [activeAction, setActiveAction] = useState<
+    "delete" | "demote" | "promote" | null
+  >(null);
   const [newUser, setNewUser] = useState({
     email: "",
     firstName: "",
@@ -92,7 +103,19 @@ export function AdminUsersManager({ users }: AdminUsersManagerProps) {
   };
 
   const promoteToSuperAdmin = async (userId: string) => {
-    setPromotingUserId(userId);
+    await updateUserRole(userId, "super_admin");
+  };
+
+  const demoteToMember = async (userId: string) => {
+    await updateUserRole(userId, "member");
+  };
+
+  const updateUserRole = async (
+    userId: string,
+    role: "member" | "super_admin",
+  ) => {
+    setActiveUserId(userId);
+    setActiveAction(role === "super_admin" ? "promote" : "demote");
 
     try {
       const response = await fetch(`/api/admin/users/${userId}/role`, {
@@ -101,7 +124,7 @@ export function AdminUsersManager({ users }: AdminUsersManagerProps) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          role: "super_admin",
+          role,
         }),
       });
 
@@ -114,16 +137,60 @@ export function AdminUsersManager({ users }: AdminUsersManagerProps) {
         throw new Error(result?.error ?? result?.hint ?? "Unable to update role");
       }
 
-      toast.success("User promoted", {
-        description: "The user is now a super admin.",
-      });
+      toast.success(
+        role === "super_admin" ? "User promoted" : "User demoted",
+        {
+          description:
+            role === "super_admin"
+              ? "The user is now a super admin."
+              : "The user is now a member.",
+        },
+      );
       router.refresh();
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Unable to update role",
       );
     } finally {
-      setPromotingUserId(null);
+      setActiveUserId(null);
+      setActiveAction(null);
+    }
+  };
+
+  const deleteUser = async (userId: string, email: string | null) => {
+    const confirmed = window.confirm(
+      `Delete ${email ?? "this user"}? This cannot be undone.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setActiveUserId(userId);
+    setActiveAction("delete");
+
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: "DELETE",
+      });
+
+      const result = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(result?.error ?? "Unable to delete user");
+      }
+
+      toast.success("User deleted", {
+        description: email ?? "The user was deleted successfully.",
+      });
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to delete user");
+    } finally {
+      setActiveUserId(null);
+      setActiveAction(null);
     }
   };
 
@@ -250,7 +317,7 @@ export function AdminUsersManager({ users }: AdminUsersManagerProps) {
             <TableBody>
               {users.map((listedUser) => {
                 const isAlreadySuperAdmin = listedUser.role === "super_admin";
-                const isPromoting = promotingUserId === listedUser.id;
+                const isBusy = activeUserId === listedUser.id;
 
                 return (
                   <TableRow key={listedUser.id}>
@@ -265,22 +332,59 @@ export function AdminUsersManager({ users }: AdminUsersManagerProps) {
                       {formatLastSignedIn(listedUser.last_signed_in_at)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {isAlreadySuperAdmin ? (
-                        <span className="text-sm text-muted-foreground">
-                          Super admin
-                        </span>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={isPromoting}
-                          onClick={() => promoteToSuperAdmin(listedUser.id)}
-                        >
-                          {isPromoting
-                            ? "Promoting..."
-                            : "Promote to Super Admin"}
-                        </Button>
-                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={isBusy}
+                          >
+                            <MoreHorizontal />
+                            <span className="sr-only">Open actions</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                          {isAlreadySuperAdmin ? (
+                            <DropdownMenuItem
+                              disabled={isBusy}
+                              onSelect={() => {
+                                void demoteToMember(listedUser.id);
+                              }}
+                            >
+                              <Shield />
+                              {isBusy && activeAction === "demote"
+                                ? "Demoting..."
+                                : "Demote to Member"}
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              disabled={isBusy}
+                              onSelect={() => {
+                                void promoteToSuperAdmin(listedUser.id);
+                              }}
+                            >
+                              <Shield />
+                              {isBusy && activeAction === "promote"
+                                ? "Promoting..."
+                                : "Promote to Super Admin"}
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="destructive"
+                            disabled={isBusy}
+                            onSelect={() => {
+                              void deleteUser(listedUser.id, listedUser.email);
+                            }}
+                          >
+                            <Trash2 />
+                            {isBusy && activeAction === "delete"
+                              ? "Deleting..."
+                              : "Delete User"}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 );
