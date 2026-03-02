@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { usePathname } from "next/navigation";
 import {
   AudioWaveform,
   BookOpen,
@@ -11,6 +12,7 @@ import {
   Map,
   PieChart,
   Settings2,
+  Shield,
   SquareTerminal,
 } from "lucide-react";
 
@@ -156,18 +158,38 @@ const data = {
 };
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
+  isSuperAdmin?: boolean;
   user?: {
     name?: string;
     email?: string;
   };
 };
 
-export function AppSidebar({ user, ...props }: AppSidebarProps) {
+export function AppSidebar({
+  isSuperAdmin = false,
+  user,
+  ...props
+}: AppSidebarProps) {
+  const pathname = usePathname();
   const sidebarUser = {
     ...data.user,
     name: user?.name ?? data.user.name,
     email: user?.email ?? data.user.email,
   };
+  const adminItems = [
+    {
+      title: "System",
+      url: "#",
+      icon: Shield,
+      isActive: pathname.startsWith("/admin"),
+      items: [
+        {
+          title: "Users",
+          url: "/admin/users",
+        },
+      ],
+    },
+  ];
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -175,8 +197,9 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
         <TeamSwitcher teams={data.teams} />
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain label="Platform" items={data.navMain} />
         <NavProjects projects={data.projects} />
+        {isSuperAdmin ? <NavMain label="Admin" items={adminItems} /> : null}
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={sidebarUser} />
