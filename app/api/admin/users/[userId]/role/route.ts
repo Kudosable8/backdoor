@@ -49,6 +49,13 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
   } else {
+    if (userId === appUser.user.id) {
+      return NextResponse.json(
+        { error: "You cannot remove your own super admin role from this screen." },
+        { status: 400 },
+      );
+    }
+
     const { error } = await adminClient
       .from("user_roles")
       .delete()
