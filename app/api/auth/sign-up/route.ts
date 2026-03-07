@@ -45,13 +45,16 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: parsedPayload.data.email,
     password: parsedPayload.data.password,
     options: {
       emailRedirectTo: `${new URL(request.url).origin}/dashboard`,
     },
   });
+
+  console.log("[sign-up] data:", JSON.stringify(data));
+  console.log("[sign-up] error:", JSON.stringify(error));
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
