@@ -30,7 +30,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { AdminUserRow } from "@/lib/features/admin/types";
+import {
+  agencyRoleLabels,
+  type AgencyRole,
+} from "@/lib/features/auth/types";
+import type {
+  AdminAgencyOption,
+  AdminUserRow,
+} from "@/lib/features/admin/types";
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   dateStyle: "medium",
@@ -46,17 +53,20 @@ function formatLastSignedIn(lastSignedInAt: string | null) {
 }
 
 type AdminUsersManagerProps = {
+  agencies: AdminAgencyOption[];
   users: AdminUserRow[];
 };
 
-export function AdminUsersManager({ users }: AdminUsersManagerProps) {
+export function AdminUsersManager({ agencies, users }: AdminUsersManagerProps) {
   const router = useRouter();
   const [isCreating, startCreateTransition] = useTransition();
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<
-    "delete" | "demote" | "promote" | null
+    "delete" | "demote" | "impersonate" | "promote" | null
   >(null);
   const [newUser, setNewUser] = useState({
+    agencyId: "none",
+    agencyRole: "recruiter" as AgencyRole,
     email: "",
     firstName: "",
     lastName: "",
@@ -68,12 +78,17 @@ export function AdminUsersManager({ users }: AdminUsersManagerProps) {
     event.preventDefault();
 
     startCreateTransition(async () => {
+      const payload = {
+        ...newUser,
+        agencyId: newUser.agencyId === "none" ? null : newUser.agencyId,
+        agencyRole: newUser.agencyId === "none" ? null : newUser.agencyRole,
+      };
       const response = await fetch("/api/admin/users", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(newUser),
+        body: JSON.stringify(payload),
       });
 
       const result = (await response.json().catch(() => null)) as {
@@ -89,6 +104,8 @@ export function AdminUsersManager({ users }: AdminUsersManagerProps) {
       }
 
       setNewUser({
+        agencyId: "none",
+        agencyRole: "recruiter",
         email: "",
         firstName: "",
         lastName: "",
@@ -194,17 +211,52 @@ export function AdminUsersManager({ users }: AdminUsersManagerProps) {
     }
   };
 
+  const impersonateUser = async (userId: string, email: string | null) => {
+    const confirmed = window.confirm(
+      `Log in as ${email ?? "this user"}? You will be able to return to your super admin session.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setActiveUserId(userId);
+    setActiveAction("impersonate");
+
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/impersonate`, {
+        method: "POST",
+      });
+      const result = (await response.json().catch(() => null)) as
+        | { actionLink?: string; error?: string }
+        | null;
+
+      if (!response.ok || !result?.actionLink) {
+        throw new Error(result?.error ?? "Unable to impersonate user");
+      }
+
+      window.location.assign(result.actionLink);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to impersonate user",
+      );
+      setActiveUserId(null);
+      setActiveAction(null);
+    }
+  };
+
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="min-w-0 rounded-xl border bg-card">
         <div className="border-b px-4 py-3">
           <h2 className="text-base font-semibold">Add User</h2>
           <p className="text-sm text-muted-foreground">
-            Create a user with an initial password and assign a role.
+            Create a user with an initial password, optional super admin access,
+            and an optional initial agency membership.
           </p>
         </div>
         <form
-          className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.25fr)_auto]"
+          className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.25fr)_minmax(0,1fr)_auto]"
           onSubmit={handleCreateUser}
         >
           <div className="grid gap-2">
@@ -286,6 +338,54 @@ export function AdminUsersManager({ users }: AdminUsersManagerProps) {
               }
             />
           </div>
+          <div className="grid gap-2">
+            <Label htmlFor="admin-user-agency">Agency Membership</Label>
+            <Select
+              value={newUser.agencyId}
+              onValueChange={(value) =>
+                setNewUser((current) => ({
+                  ...current,
+                  agencyId: value,
+                }))
+              }
+            >
+              <SelectTrigger id="admin-user-agency" className="w-full">
+                <SelectValue placeholder="No agency membership" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No agency membership</SelectItem>
+                {agencies.map((agency) => (
+                  <SelectItem key={agency.id} value={agency.id}>
+                    {agency.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="admin-user-agency-role">Agency Role</Label>
+            <Select
+              value={newUser.agencyRole}
+              disabled={newUser.agencyId === "none"}
+              onValueChange={(value) =>
+                setNewUser((current) => ({
+                  ...current,
+                  agencyRole: value as AgencyRole,
+                }))
+              }
+            >
+              <SelectTrigger id="admin-user-agency-role" className="w-full">
+                <SelectValue placeholder="Select an agency role" />
+              </SelectTrigger>
+              <SelectContent>
+                {(["owner", "manager", "recruiter", "finance", "read_only"] as AgencyRole[]).map((role) => (
+                  <SelectItem key={role} value={role}>
+                    {agencyRoleLabels[role]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex items-end">
             <Button type="submit" disabled={isCreating}>
               {isCreating ? "Creating user..." : "Add User"}
@@ -309,6 +409,8 @@ export function AdminUsersManager({ users }: AdminUsersManagerProps) {
                 <TableHead>Email</TableHead>
                 <TableHead>First Name</TableHead>
                 <TableHead>Last Name</TableHead>
+                <TableHead>Agency</TableHead>
+                <TableHead>Agency Role</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Last Signed In</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -327,6 +429,12 @@ export function AdminUsersManager({ users }: AdminUsersManagerProps) {
                     <TableCell>{listedUser.email ?? "No email"}</TableCell>
                     <TableCell>{listedUser.first_name ?? "Not set"}</TableCell>
                     <TableCell>{listedUser.last_name ?? "Not set"}</TableCell>
+                    <TableCell>{listedUser.agency_name ?? "No agency"}</TableCell>
+                    <TableCell>
+                      {listedUser.agency_role
+                        ? agencyRoleLabels[listedUser.agency_role]
+                        : "No role"}
+                    </TableCell>
                     <TableCell>{listedUser.role ?? "member"}</TableCell>
                     <TableCell>
                       {formatLastSignedIn(listedUser.last_signed_in_at)}
@@ -345,6 +453,17 @@ export function AdminUsersManager({ users }: AdminUsersManagerProps) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-52">
+                          <DropdownMenuItem
+                            disabled={isBusy}
+                            onSelect={() => {
+                              void impersonateUser(listedUser.id, listedUser.email);
+                            }}
+                          >
+                            {isBusy && activeAction === "impersonate"
+                              ? "Logging in..."
+                              : "Login as user"}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           {isAlreadySuperAdmin ? (
                             <DropdownMenuItem
                               disabled={isBusy}
