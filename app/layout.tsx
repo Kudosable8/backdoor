@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { Toaster } from "@/components/ui/sonner";
 import { Geist } from "next/font/google";
 import { ThemeProvider } from "next-themes";
@@ -34,6 +36,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <Suspense fallback={null}>
+            <ImpersonationBanner />
+          </Suspense>
           {children}
           <Toaster />
         </ThemeProvider>

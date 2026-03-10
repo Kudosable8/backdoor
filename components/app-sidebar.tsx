@@ -3,21 +3,14 @@
 import * as React from "react";
 import { usePathname } from "next/navigation";
 import {
-  AudioWaveform,
-  BookOpen,
-  Bot,
-  Command,
-  Frame,
-  GalleryVerticalEnd,
-  Map,
-  PieChart,
-  Settings2,
+  BriefcaseBusiness,
+  Building2,
+  LayoutDashboard,
   Shield,
-  SquareTerminal,
+  Users,
 } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
-import { NavProjects } from "@/components/nav-projects";
 import { NavUser } from "@/components/nav-user";
 import { TeamSwitcher } from "@/components/team-switcher";
 import {
@@ -27,137 +20,14 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar";
-
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
-  teams: [
-    {
-      name: "Acme Inc",
-      logo: GalleryVerticalEnd,
-      plan: "Enterprise",
-    },
-    {
-      name: "Acme Corp.",
-      logo: AudioWaveform,
-      plan: "Startup",
-    },
-    {
-      name: "Evil Corp.",
-      logo: Command,
-      plan: "Free",
-    },
-  ],
-  navMain: [
-    {
-      title: "Playground",
-      url: "#",
-      icon: SquareTerminal,
-      isActive: true,
-      items: [
-        {
-          title: "History",
-          url: "#",
-        },
-        {
-          title: "Starred",
-          url: "#",
-        },
-        {
-          title: "Settings",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Models",
-      url: "#",
-      icon: Bot,
-      items: [
-        {
-          title: "Genesis",
-          url: "#",
-        },
-        {
-          title: "Explorer",
-          url: "#",
-        },
-        {
-          title: "Quantum",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Documentation",
-      url: "#",
-      icon: BookOpen,
-      items: [
-        {
-          title: "Introduction",
-          url: "#",
-        },
-        {
-          title: "Get Started",
-          url: "#",
-        },
-        {
-          title: "Tutorials",
-          url: "#",
-        },
-        {
-          title: "Changelog",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Settings",
-      url: "#",
-      icon: Settings2,
-      items: [
-        {
-          title: "General",
-          url: "#",
-        },
-        {
-          title: "Team",
-          url: "#",
-        },
-        {
-          title: "Billing",
-          url: "#",
-        },
-        {
-          title: "Limits",
-          url: "#",
-        },
-      ],
-    },
-  ],
-  projects: [
-    {
-      name: "Design Engineering",
-      url: "#",
-      icon: Frame,
-    },
-    {
-      name: "Sales & Marketing",
-      url: "#",
-      icon: PieChart,
-    },
-    {
-      name: "Travel",
-      url: "#",
-      icon: Map,
-    },
-  ],
-};
+import { agencyRoleLabels, type AgencyRole } from "@/lib/features/auth/types";
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
+  agency?: {
+    name: string;
+    role: AgencyRole;
+    slug: string;
+  } | null;
   isSuperAdmin?: boolean;
   user?: {
     name?: string;
@@ -166,16 +36,77 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
 };
 
 export function AppSidebar({
+  agency = null,
   isSuperAdmin = false,
   user,
   ...props
 }: AppSidebarProps) {
   const pathname = usePathname();
   const sidebarUser = {
-    ...data.user,
-    name: user?.name ?? data.user.name,
-    email: user?.email ?? data.user.email,
+    avatar: "/avatars/default-user.png",
+    name: user?.name ?? "User",
+    email: user?.email ?? "No email available",
   };
+  const workspaceItems = [
+    {
+      title: "Workspace",
+      url: "/dashboard",
+      icon: LayoutDashboard,
+      isActive:
+        pathname.startsWith("/dashboard") ||
+        pathname.startsWith("/imports") ||
+        pathname.startsWith("/cases"),
+      items: [
+        {
+          title: "Overview",
+          url: "/dashboard",
+        },
+        ...(agency && agency.role !== "read_only" && agency.role !== "finance"
+          ? [
+              {
+                title: "Imports",
+                url: "/imports",
+              },
+            ]
+          : []),
+        ...(agency
+          ? [
+              {
+                title: "Cases",
+                url: "/cases",
+              },
+              ...(agency.role === "owner" ||
+              agency.role === "manager" ||
+              agency.role === "finance"
+                ? [
+                    {
+                      title: "Audit",
+                      url: "/audit",
+                    },
+                  ]
+                : []),
+            ]
+          : []),
+      ],
+    },
+  ];
+  const teamItems =
+    agency && (agency.role === "owner" || agency.role === "manager")
+      ? [
+          {
+            title: "People",
+            url: "/team",
+            icon: Users,
+            isActive: pathname.startsWith("/team"),
+            items: [
+              {
+                title: "Team management",
+                url: "/team",
+              },
+            ],
+          },
+        ]
+      : [];
   const adminItems = [
     {
       title: "System",
@@ -190,15 +121,28 @@ export function AppSidebar({
       ],
     },
   ];
+  const teams = [
+    agency
+      ? {
+          name: agency.name,
+          logo: Building2,
+          plan: agencyRoleLabels[agency.role],
+        }
+      : {
+          name: isSuperAdmin ? "Platform Admin" : "No Agency Assigned",
+          logo: BriefcaseBusiness,
+          plan: isSuperAdmin ? "Super Admin" : "Pending Invite",
+        },
+  ];
 
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
+        <TeamSwitcher teams={teams} />
       </SidebarHeader>
       <SidebarContent>
-        <NavMain label="Platform" items={data.navMain} />
-        <NavProjects projects={data.projects} />
+        <NavMain label="Workspace" items={workspaceItems} />
+        {teamItems.length > 0 ? <NavMain label="Team" items={teamItems} /> : null}
         {isSuperAdmin ? <NavMain label="Admin" items={adminItems} /> : null}
       </SidebarContent>
       <SidebarFooter>

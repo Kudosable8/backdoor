@@ -1,6 +1,9 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,24 +14,90 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { cn } from "@/lib/utils";
+import { agencyRoleLabels, type AgencyRole } from "@/lib/features/auth/types";
+
+type InviteLookupResult = {
+  agencyName: string;
+  email: string;
+  isAccepted: boolean;
+  isExpired: boolean;
+  role: AgencyRole;
+};
 
 export function SignUpForm({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  const [email, setEmail] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const inviteToken = searchParams.get("invite")?.trim() ?? "";
+  const [invite, setInvite] = useState<InviteLookupResult | null>(null);
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
+  const [isLoadingInvite, setIsLoadingInvite] = useState(true);
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadInvite = async () => {
+      if (!inviteToken) {
+        setInvite(null);
+        setError("A valid invite link is required to create an account.");
+        setIsLoadingInvite(false);
+        return;
+      }
+
+      setIsLoadingInvite(true);
+      setError(null);
+
+      try {
+        const response = await fetch(
+          `/api/auth/sign-up?token=${encodeURIComponent(inviteToken)}`,
+        );
+        const result = (await response.json().catch(() => null)) as
+          | ({ error?: string } & Partial<InviteLookupResult>)
+          | null;
+
+        if (!response.ok) {
+          throw new Error(result?.error ?? "Unable to load invite");
+        }
+
+        if (isMounted) {
+          setInvite(result as InviteLookupResult);
+        }
+      } catch (lookupError) {
+        if (isMounted) {
+          setInvite(null);
+          setError(
+            lookupError instanceof Error
+              ? lookupError.message
+              : "Unable to load invite",
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingInvite(false);
+        }
+      }
+    };
+
+    void loadInvite();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [inviteToken]);
+
+  const handleSignUp = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!inviteToken || !invite || invite.isAccepted || invite.isExpired) {
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -45,8 +114,8 @@ export function SignUpForm({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email,
-          inviteCode: inviteCode.trim(),
+          email: invite.email,
+          token: inviteToken,
           password,
           repeatPassword,
         }),
@@ -61,31 +130,46 @@ export function SignUpForm({
       }
 
       router.push("/auth/sign-up-success");
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+    } catch (signUpError) {
+      setError(
+        signUpError instanceof Error ? signUpError.message : "An error occurred",
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
+  const isInviteInvalid =
+    !invite || invite.isAccepted || invite.isExpired || isLoadingInvite;
+
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Sign up</CardTitle>
-          <CardDescription>Create a new account</CardDescription>
+          <CardTitle className="text-2xl">Accept invite</CardTitle>
+          <CardDescription>
+            Create your account to join your agency workspace.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignUp}>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
-                <Label htmlFor="invite-code">Invite Code</Label>
+                <Label htmlFor="agency">Agency</Label>
                 <Input
-                  id="invite-code"
+                  id="agency"
                   type="text"
-                  required
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
+                  value={invite?.agencyName ?? (isLoadingInvite ? "Loading..." : "")}
+                  disabled
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="role">Role</Label>
+                <Input
+                  id="role"
+                  type="text"
+                  value={invite?.role ? agencyRoleLabels[invite.role] : ""}
+                  disabled
                 />
               </div>
               <div className="grid gap-2">
@@ -93,39 +177,50 @@ export function SignUpForm({
                 <Input
                   id="email"
                   type="email"
-                  placeholder="m@example.com"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={invite?.email ?? ""}
+                  disabled
                 />
               </div>
               <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
-                </div>
+                <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
                   type="password"
                   required
+                  minLength={8}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(event) => setPassword(event.target.value)}
+                  disabled={isInviteInvalid || isLoading}
                 />
               </div>
               <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="repeat-password">Repeat Password</Label>
-                </div>
+                <Label htmlFor="repeat-password">Repeat Password</Label>
                 <Input
                   id="repeat-password"
                   type="password"
                   required
                   value={repeatPassword}
-                  onChange={(e) => setRepeatPassword(e.target.value)}
+                  onChange={(event) => setRepeatPassword(event.target.value)}
+                  disabled={isInviteInvalid || isLoading}
                 />
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Creating an account..." : "Sign up"}
+              {invite?.isAccepted ? (
+                <p className="text-sm text-amber-600">
+                  This invite has already been accepted.
+                </p>
+              ) : null}
+              {invite?.isExpired ? (
+                <p className="text-sm text-amber-600">
+                  This invite has expired. Ask your agency manager for a new one.
+                </p>
+              ) : null}
+              {error ? <p className="text-sm text-red-500">{error}</p> : null}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isInviteInvalid || isLoading}
+              >
+                {isLoading ? "Creating your account..." : "Create account"}
               </Button>
             </div>
             <div className="mt-4 text-center text-sm">

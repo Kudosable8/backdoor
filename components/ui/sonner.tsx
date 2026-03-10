@@ -10,6 +10,8 @@ import {
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 
+import { cn } from "@/lib/utils"
+
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
 
@@ -32,6 +34,27 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--border-radius": "var(--radius)",
         } as React.CSSProperties
       }
+      toastOptions={{
+        classNames: {
+          toast: cn(
+            "border border-border bg-popover text-popover-foreground shadow-lg backdrop-blur supports-[backdrop-filter]:bg-popover/95"
+          ),
+          title: "text-foreground",
+          description: "text-muted-foreground",
+          actionButton:
+            "bg-primary text-primary-foreground hover:bg-primary/90",
+          cancelButton:
+            "bg-muted text-muted-foreground hover:bg-muted/80",
+          error:
+            "border-destructive/30 bg-popover text-popover-foreground",
+          success:
+            "border-emerald-500/30 bg-popover text-popover-foreground",
+          warning:
+            "border-amber-500/30 bg-popover text-popover-foreground",
+          info:
+            "border-sky-500/30 bg-popover text-popover-foreground",
+        },
+      }}
       {...props}
     />
   )
