@@ -91,7 +91,7 @@ async function CasesPageContent() {
       caseIds.length
         ? supabase
             .from("case_checks")
-            .select("case_id, status")
+            .select("case_id, check_type, status, result_json")
             .eq("agency_id", agency.agencyId)
             .in("case_id", caseIds)
         : Promise.resolve({ data: [], error: null }),
@@ -118,10 +118,15 @@ async function CasesPageContent() {
     }),
   );
   const pendingCheckCountByCaseId = new Map<string, number>();
+  const emailLookupStatusByCaseId = new Map< string, CaseQueueRow["email_lookup_status"]>();
 
   for (const row of ((checkRows as
     | {
         case_id: string;
+        check_type: string;
+        result_json: {
+          outcome?: "error" | "matched" | "missing_source" | "no_match_found";
+        } | null;
         status: "completed" | "failed" | "pending" | "processing" | "skipped";
       }[]
     | null) ?? [])) {
@@ -131,6 +136,27 @@ async function CasesPageContent() {
         (pendingCheckCountByCaseId.get(row.case_id) ?? 0) + 1,
       );
     }
+
+    if (row.check_type !== "company_email_lookup") {
+      continue;
+    }
+
+    const emailStatus =
+      row.status === "pending"
+        ? "queued"
+        : row.status === "processing"
+          ? "running"
+          : row.status === "failed"
+            ? "needs_review"
+            : row.result_json?.outcome === "matched"
+              ? "deliverable_found"
+              : row.result_json?.outcome === "no_match_found"
+                ? "no_match"
+                : row.result_json?.outcome === "missing_source"
+                  ? "missing_source"
+                  : "not_started";
+
+    emailLookupStatusByCaseId.set(row.case_id, emailStatus);
   }
 
   const rows: CaseQueueRow[] = rawCases
@@ -152,6 +178,7 @@ async function CasesPageContent() {
         client_company_raw: introduction.client_company_raw,
         confidence: row.confidence,
         created_at: row.created_at,
+        email_lookup_status: emailLookupStatusByCaseId.get(row.id) ?? "not_started",
         id: row.id,
         introduced_role_raw: introduction.introduced_role_raw,
         last_activity_at: row.last_activity_at,

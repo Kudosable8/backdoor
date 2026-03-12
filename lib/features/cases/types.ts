@@ -52,6 +52,14 @@ export type CaseQueueRow = {
   client_company_raw: string;
   confidence: CaseConfidence;
   created_at: string;
+  email_lookup_status:
+    | "deliverable_found"
+    | "no_match"
+    | "queued"
+    | "running"
+    | "needs_review"
+    | "missing_source"
+    | "not_started";
   id: string;
   introduced_role_raw: string;
   last_activity_at: string;

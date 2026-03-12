@@ -101,6 +101,64 @@ function getTimelineBadgeVariant(kind: CaseTimelineItem["kind"]) {
   return "outline";
 }
 
+function getEmailResearchSummary(checks: CaseCheckRow[]) {
+  const emailCheck = checks.find((check) => check.check_type === "company_email_lookup");
+
+  if (!emailCheck) {
+    return {
+      label: "Email lookup not queued",
+      variant: "outline" as const,
+    };
+  }
+
+  if (emailCheck.outcome === "matched") {
+    return {
+      label: "Deliverable company email found",
+      variant: "default" as const,
+    };
+  }
+
+  if (emailCheck.outcome === "no_match_found") {
+    return {
+      label: "No deliverable company email found",
+      variant: "secondary" as const,
+    };
+  }
+
+  if (emailCheck.outcome === "missing_source") {
+    return {
+      label: "Email lookup missing source data",
+      variant: "outline" as const,
+    };
+  }
+
+  if (emailCheck.outcome === "error" || emailCheck.status === "failed") {
+    return {
+      label: "Email lookup needs review",
+      variant: "outline" as const,
+    };
+  }
+
+  if (emailCheck.status === "processing") {
+    return {
+      label: "Email lookup running",
+      variant: "secondary" as const,
+    };
+  }
+
+  if (emailCheck.status === "pending") {
+    return {
+      label: "Email lookup queued",
+      variant: "secondary" as const,
+    };
+  }
+
+  return {
+    label: "Email lookup available",
+    variant: "outline" as const,
+  };
+}
+
 export function CaseDetail({
   assignees,
   caseItem,
@@ -133,6 +191,7 @@ export function CaseDetail({
   const canEdit = currentUserRole !== "read_only";
   const canExport = currentUserRole === "owner" || currentUserRole === "manager" || currentUserRole === "finance";
   const canSend = currentUserRole === "owner" || currentUserRole === "manager" || currentUserRole === "finance";
+  const emailResearchSummary = getEmailResearchSummary(checks);
 
   const handleRunResearch = () => {
     startResearchTransition(async () => {
@@ -501,11 +560,36 @@ export function CaseDetail({
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
+              <div className="flex flex-wrap gap-2 rounded-lg border border-dashed p-3 text-sm">
+                <span className="font-medium">Email status</span>
+                <Badge variant={emailResearchSummary.variant}>{emailResearchSummary.label}</Badge>
+              </div>
               {checks.length > 0 ? (
                 checks.map((check) => (
                   <div key={check.id} className="rounded-lg border p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-medium">{caseCheckTypeLabels[check.check_type]}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium">{caseCheckTypeLabels[check.check_type]}</p>
+                        {check.check_type === "company_email_lookup" ? (
+                          <Badge
+                            variant={
+                              check.outcome === "matched"
+                                ? "default"
+                                : check.outcome === "no_match_found"
+                                  ? "secondary"
+                                  : "outline"
+                            }
+                          >
+                            {check.outcome === "matched"
+                              ? "Deliverable email found"
+                              : check.outcome === "no_match_found"
+                                ? "No deliverable email"
+                                : check.status === "failed"
+                                  ? "Needs review"
+                                  : "Lookup status"}
+                          </Badge>
+                        ) : null}
+                      </div>
                       <Badge variant={check.status === "completed" ? "secondary" : check.status === "failed" ? "outline" : "default"}>
                         {caseCheckStatusLabels[check.status]}
                       </Badge>

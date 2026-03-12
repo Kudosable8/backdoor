@@ -3,6 +3,7 @@ import type { CaseConfidence, CaseStatus } from "@/lib/features/cases/types";
 
 export type DashboardStats = {
   completedResearchChecks: number;
+  deliverableEmailCases: number;
   failedResearchChecks: number;
   highConfidenceCases: number;
   introductions: number;
@@ -22,6 +23,14 @@ export type DashboardRecentCase = {
   candidate_full_name: string;
   client_company_raw: string;
   current_score: number;
+  email_lookup_status:
+    | "deliverable_found"
+    | "no_match"
+    | "queued"
+    | "running"
+    | "needs_review"
+    | "missing_source"
+    | "not_started";
   id: string;
   score_band: CaseConfidence;
   status: CaseStatus;

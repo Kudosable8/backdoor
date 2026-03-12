@@ -71,7 +71,7 @@ async function DashboardPageContent() {
           .eq("agency_id", agency.agencyId),
         supabase
           .from("case_checks")
-          .select("id, status, completed_at, result_json")
+          .select("id, case_id, check_type, status, completed_at, result_json")
           .eq("agency_id", agency.agencyId),
         supabase
           .from("research_runs")
@@ -112,7 +112,42 @@ async function DashboardPageContent() {
             id: string;
           }[]
         | null) ?? [];
+    const researchCheckRows = ((checkRows as
+      | {
+          case_id: string;
+          check_type: string;
+          completed_at: string | null;
+          result_json: {
+            outcome?: "error" | "matched" | "missing_source" | "no_match_found";
+          } | null;
+          status: string;
+        }[]
+      | null) ?? []);
     const introMap = new Map(rawIntroductions.map((row) => [row.id, row]));
+    const emailLookupStatusByCaseId = new Map<string, DashboardRecentCase["email_lookup_status"]>();
+
+    for (const row of researchCheckRows) {
+      if (row.check_type !== "company_email_lookup") {
+        continue;
+      }
+
+      const emailStatus =
+        row.status === "pending"
+          ? "queued"
+          : row.status === "processing"
+            ? "running"
+            : row.status === "failed"
+              ? "needs_review"
+              : row.result_json?.outcome === "matched"
+                ? "deliverable_found"
+                : row.result_json?.outcome === "no_match_found"
+                  ? "no_match"
+                  : row.result_json?.outcome === "missing_source"
+                    ? "missing_source"
+                    : "not_started";
+
+      emailLookupStatusByCaseId.set(row.case_id, emailStatus);
+    }
 
     recentCases = rawCases.slice(0, 6).map((row) => {
       const intro = introMap.get(row.candidate_introduction_id);
@@ -121,6 +156,7 @@ async function DashboardPageContent() {
         candidate_full_name: intro?.candidate_full_name ?? "Unknown candidate",
         client_company_raw: intro?.client_company_raw ?? "Unknown client",
         current_score: row.current_score,
+        email_lookup_status: emailLookupStatusByCaseId.get(row.id) ?? "not_started",
         id: row.id,
         score_band: row.score_band,
         status: row.status,
@@ -148,19 +184,13 @@ async function DashboardPageContent() {
       (((outreachRows as { status: string }[] | null) ?? []).filter(
         (row) => row.status === "sent",
       ).length);
-    const researchCheckRows = ((checkRows as
-      | {
-          completed_at: string | null;
-          result_json: {
-            outcome?: "error" | "matched" | "missing_source" | "no_match_found";
-          } | null;
-          status: string;
-        }[]
-      | null) ?? []);
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
     stats = {
       completedResearchChecks: researchCheckRows.filter((row) => row.status === "completed").length,
+      deliverableEmailCases: Array.from(emailLookupStatusByCaseId.values()).filter(
+        (value) => value === "deliverable_found",
+      ).length,
       failedResearchChecks: researchCheckRows.filter((row) => row.status === "failed").length,
       highConfidenceCases: rawCases.filter((row) => row.score_band === "high").length,
       introductions: rawIntroductions.length,
