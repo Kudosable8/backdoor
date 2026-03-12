@@ -4,6 +4,11 @@ import type {
   CaseEvidenceType,
   CaseScoreBand,
 } from "./scoring";
+import type {
+  CaseCheckStatus,
+  CaseCheckType,
+  CaseResearchStatus,
+} from "./research";
 
 export const CASE_STATUSES = [
   "new",
@@ -48,6 +53,8 @@ export type CaseQueueRow = {
   id: string;
   introduced_role_raw: string;
   last_activity_at: string;
+  pending_check_count: number;
+  research_status: CaseResearchStatus;
   recruiter_name: string | null;
   status: CaseStatus;
   submission_date: string | null;
@@ -84,10 +91,25 @@ export type CaseDetailRow = {
   introduced_role_raw: string;
   last_activity_at: string;
   notes: string | null;
+  pending_check_count: number;
+  completed_check_count: number;
+  failed_check_count: number;
   recruiter_name: string | null;
+  research_status: CaseResearchStatus;
+  researched_at: string | null;
   score_band: CaseScoreBand;
   status: CaseStatus;
   submission_date: string | null;
+};
+
+export type CaseCheckRow = {
+  check_type: CaseCheckType;
+  completed_at: string | null;
+  error_text: string | null;
+  id: string;
+  result_summary: string | null;
+  source_url: string | null;
+  status: CaseCheckStatus;
 };
 
 export type CaseEvidenceRow = {

@@ -73,6 +73,11 @@
 - [x] Create initial rules-based scoring model
 - [x] Show score explanation in UI
 - [x] Prevent single weak signal from producing a high-confidence case
+- [x] Add initial automated research check queue
+- [x] Enqueue company-site checks for new cases
+- [x] Add public-web search checks backed by Brave Search API
+- [x] Surface research status and run controls in case review UI
+- [x] Add background cron route for queued research execution
 
 ## Phase 6: Audit trail and exports
 

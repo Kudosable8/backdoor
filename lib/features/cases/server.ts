@@ -4,6 +4,7 @@ import type { AppUserContext } from "@/lib/features/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   CaseAssigneeOption,
+  CaseCheckRow,
   CaseDetailRow,
   CaseEvidenceRow,
   CaseNoteRow,
@@ -27,7 +28,7 @@ export async function getCaseDetailData({
   const { data: caseRow, error: caseError } = await supabase
     .from("cases")
     .select(
-      "id, candidate_introduction_id, status, confidence, current_score, score_band, assigned_to_user_id, created_at, last_activity_at",
+      "id, candidate_introduction_id, status, confidence, current_score, score_band, assigned_to_user_id, created_at, last_activity_at, research_status, researched_at",
     )
     .eq("agency_id", agency.agencyId)
     .eq("id", caseId)
@@ -49,6 +50,8 @@ export async function getCaseDetailData({
     current_score: number;
     id: string;
     last_activity_at: string;
+    researched_at: string | null;
+    research_status: CaseDetailRow["research_status"];
     score_band: CaseDetailRow["score_band"];
     status: CaseDetailRow["status"];
   };
@@ -59,6 +62,7 @@ export async function getCaseDetailData({
     { data: membershipRows, error: membershipError },
     { data: evidenceRows, error: evidenceError },
     { data: scoreEventRows, error: scoreEventsError },
+    { data: checkRows, error: checksError },
     { data: outreachRows, error: outreachError },
   ] = await Promise.all([
     supabase
@@ -95,6 +99,12 @@ export async function getCaseDetailData({
       .eq("case_id", caseId)
       .order("created_at", { ascending: false }),
     supabase
+      .from("case_checks")
+      .select("id, check_type, status, completed_at, error_text, source_url, result_json")
+      .eq("agency_id", agency.agencyId)
+      .eq("case_id", caseId)
+      .order("created_at", { ascending: false }),
+    supabase
       .from("outreach_messages")
       .select(
         "id, recipient_email, subject, body_markdown, status, resend_email_id, sent_at, error_text, created_at",
@@ -112,12 +122,20 @@ export async function getCaseDetailData({
     notFound();
   }
 
-  if (notesError || membershipError || evidenceError || scoreEventsError || outreachError) {
+  if (
+    notesError ||
+    membershipError ||
+    evidenceError ||
+    scoreEventsError ||
+    checksError ||
+    outreachError
+  ) {
     throw new Error(
       notesError?.message ??
         membershipError?.message ??
         evidenceError?.message ??
         scoreEventsError?.message ??
+        checksError?.message ??
         outreachError?.message,
     );
   }
@@ -209,7 +227,18 @@ export async function getCaseDetailData({
     introduced_role_raw: introductionRow.introduced_role_raw,
     last_activity_at: typedCaseRow.last_activity_at,
     notes: introductionRow.notes,
+    completed_check_count: (((checkRows as { status: string }[] | null) ?? []).filter(
+      (row) => row.status === "completed" || row.status === "skipped",
+    ).length),
+    failed_check_count: (((checkRows as { status: string }[] | null) ?? []).filter(
+      (row) => row.status === "failed",
+    ).length),
+    pending_check_count: (((checkRows as { status: string }[] | null) ?? []).filter(
+      (row) => row.status === "pending" || row.status === "processing",
+    ).length),
     recruiter_name: introductionRow.recruiter_name,
+    researched_at: typedCaseRow.researched_at,
+    research_status: typedCaseRow.research_status,
     score_band: typedCaseRow.score_band,
     status: typedCaseRow.status,
     submission_date: introductionRow.submission_date,
@@ -289,6 +318,29 @@ export async function getCaseDetailData({
       id: row.id,
       rule_key: row.rule_key,
     }));
+  const checks: CaseCheckRow[] =
+    (((checkRows as
+      | {
+          check_type: CaseCheckRow["check_type"];
+          completed_at: string | null;
+          error_text: string | null;
+          id: string;
+          result_json: {
+            snippet?: string;
+          } | null;
+          source_url: string | null;
+          status: CaseCheckRow["status"];
+        }[]
+      | null) ?? [])).map((row) => ({
+      check_type: row.check_type,
+      completed_at: row.completed_at,
+      error_text: row.error_text,
+      id: row.id,
+      result_summary:
+        typeof row.result_json?.snippet === "string" ? row.result_json.snippet : null,
+      source_url: row.source_url,
+      status: row.status,
+    }));
   const outreachMessages: OutreachMessageRow[] =
     (((outreachRows as
       | {
@@ -361,6 +413,7 @@ export async function getCaseDetailData({
   return {
     assignees,
     caseItem,
+    checks,
     evidenceItems,
     notes,
     outreachMessages,
