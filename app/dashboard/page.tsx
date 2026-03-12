@@ -43,7 +43,14 @@ async function DashboardPageContent() {
   let topClients: DashboardTopClient[] = [];
 
   if (agency) {
-    const [{ data: caseRows, error: caseError }, { data: importRows, error: importError }, { data: introRows, error: introError }, { data: outreachRows, error: outreachError }] =
+    const [
+      { data: caseRows, error: caseError },
+      { data: importRows, error: importError },
+      { data: introRows, error: introError },
+      { data: outreachRows, error: outreachError },
+      { data: checkRows, error: checksError },
+      { data: researchRuns, error: researchRunsError },
+    ] =
       await Promise.all([
         supabase
           .from("cases")
@@ -62,14 +69,26 @@ async function DashboardPageContent() {
           .from("outreach_messages")
           .select("id, status")
           .eq("agency_id", agency.agencyId),
+        supabase
+          .from("case_checks")
+          .select("id, status, completed_at, result_json")
+          .eq("agency_id", agency.agencyId),
+        supabase
+          .from("research_runs")
+          .select("started_at")
+          .eq("agency_id", agency.agencyId)
+          .order("started_at", { ascending: false })
+          .limit(20),
       ]);
 
-    if (caseError || importError || introError || outreachError) {
+    if (caseError || importError || introError || outreachError || checksError || researchRunsError) {
       throw new Error(
         caseError?.message ??
           importError?.message ??
           introError?.message ??
-          outreachError?.message,
+          outreachError?.message ??
+          checksError?.message ??
+          researchRunsError?.message,
       );
     }
 
@@ -129,11 +148,41 @@ async function DashboardPageContent() {
       (((outreachRows as { status: string }[] | null) ?? []).filter(
         (row) => row.status === "sent",
       ).length);
+    const researchCheckRows = ((checkRows as
+      | {
+          completed_at: string | null;
+          result_json: {
+            outcome?: "error" | "matched" | "missing_source" | "no_match_found";
+          } | null;
+          status: string;
+        }[]
+      | null) ?? []);
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
     stats = {
+      completedResearchChecks: researchCheckRows.filter((row) => row.status === "completed").length,
+      failedResearchChecks: researchCheckRows.filter((row) => row.status === "failed").length,
       highConfidenceCases: rawCases.filter((row) => row.score_band === "high").length,
       introductions: rawIntroductions.length,
+      matchedResearchChecksLast7Days: researchCheckRows.filter(
+        (row) =>
+          row.completed_at &&
+          new Date(row.completed_at).getTime() >= sevenDaysAgo &&
+          row.result_json?.outcome === "matched",
+      ).length,
+      noMatchResearchChecksLast7Days: researchCheckRows.filter(
+        (row) =>
+          row.completed_at &&
+          new Date(row.completed_at).getTime() >= sevenDaysAgo &&
+          row.result_json?.outcome === "no_match_found",
+      ).length,
+      pendingResearchChecks: researchCheckRows.filter(
+        (row) => row.status === "pending" || row.status === "processing",
+      ).length,
       readyToContactCases: rawCases.filter((row) => row.status === "ready_to_contact").length,
+      recentResearchRunAt:
+        ((researchRuns as { started_at: string }[] | null) ?? [])[0]?.started_at ?? null,
+      recentResearchRunsCount: ((researchRuns as { started_at: string }[] | null) ?? []).length,
       sentOutreach: outreachSentCount,
       totalCases: rawCases.length,
       totalImports: ((importRows as { id: string }[] | null) ?? []).length,

@@ -7,6 +7,11 @@ import { agencyRoleLabels } from "@/lib/features/auth/types";
 import { caseConfidenceLabels, caseStatusLabels } from "@/lib/features/cases/types";
 import type { DashboardViewModel } from "@/lib/features/dashboard/types";
 
+const dateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 export function DashboardView({
   agencyName,
   email,
@@ -128,6 +133,24 @@ export function DashboardView({
             </p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Research queue</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <p>{stats.pendingResearchChecks} pending</p>
+            <p>{stats.failedResearchChecks} failed</p>
+            <p>{stats.completedResearchChecks} completed</p>
+            <p>{stats.matchedResearchChecksLast7Days} matched in last 7 days</p>
+            <p>{stats.noMatchResearchChecksLast7Days} no-match in last 7 days</p>
+            <p className="text-muted-foreground">
+              {stats.recentResearchRunAt
+                ? `Last run ${dateTimeFormatter.format(new Date(stats.recentResearchRunAt))} • ${stats.recentResearchRunsCount} recent runs`
+                : "No research runs yet"}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
@@ -205,6 +228,11 @@ export function DashboardView({
               <Button asChild className="justify-start" variant="outline">
                 <Link href="/cases">Review active cases</Link>
               </Button>
+              {(agencyRole === "owner" || agencyRole === "manager" || agencyRole === "finance") ? (
+                <Button asChild className="justify-start" variant="outline">
+                  <Link href="/research">Research operations</Link>
+                </Button>
+              ) : null}
               {(agencyRole === "owner" || agencyRole === "manager") ? (
                 <Button asChild className="justify-start" variant="outline">
                   <Link href="/team">Manage agency team</Link>

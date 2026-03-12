@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/features/audit/server";
 import { requireAgencyRole } from "@/lib/features/auth/server";
+import { getCaseContactReadiness } from "@/lib/features/cases/research";
 
 const updateCaseSchema = z.object({
   assignedToUserId: z.string().uuid().nullable().optional(),
@@ -39,6 +40,39 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const { caseId } = await context.params;
+
+  if (parsedPayload.data.status === "ready_to_contact") {
+    try {
+      const readiness = await getCaseContactReadiness({
+        agencyId: appUser.agency.agencyId,
+        caseId,
+        supabase: appUser.supabase,
+      });
+
+      if (!readiness.canContact) {
+        return NextResponse.json(
+          {
+            error:
+              readiness.scoreBand === "low"
+                ? "This case needs stronger evidence before it can be marked ready to contact."
+                : "This case needs corroborated evidence from more than public web signals before it can be marked ready to contact.",
+          },
+          { status: 400 },
+        );
+      }
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to validate contact readiness",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   const updatePayload = {
     ...(parsedPayload.data.assignedToUserId !== undefined
       ? { assigned_to_user_id: parsedPayload.data.assignedToUserId }

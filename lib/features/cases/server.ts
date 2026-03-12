@@ -68,7 +68,7 @@ export async function getCaseDetailData({
     supabase
       .from("candidate_introductions")
       .select(
-        "candidate_full_name, candidate_linkedin_url, candidate_location, client_company_raw, client_website, fee_term_reference, introduced_role_raw, notes, recruiter_name, submission_date",
+        "candidate_full_name, candidate_linkedin_url, candidate_location, client_company_raw, client_website, fee_term_reference, introduced_role_raw, notes, recruiter_name, submission_date, ownership_window_days",
       )
       .eq("agency_id", agency.agencyId)
       .eq("id", typedCaseRow.candidate_introduction_id)
@@ -227,6 +227,15 @@ export async function getCaseDetailData({
     introduced_role_raw: introductionRow.introduced_role_raw,
     last_activity_at: typedCaseRow.last_activity_at,
     notes: introductionRow.notes,
+    ownership_window_days: introductionRow.ownership_window_days,
+    ownership_window_status:
+      introductionRow.ownership_window_days && introductionRow.submission_date
+        ? new Date(introductionRow.submission_date).getTime() +
+            introductionRow.ownership_window_days * 24 * 60 * 60 * 1000 >=
+          Date.now()
+          ? "within_window"
+          : "outside_window"
+        : "unknown",
     completed_check_count: (((checkRows as { status: string }[] | null) ?? []).filter(
       (row) => row.status === "completed" || row.status === "skipped",
     ).length),
@@ -321,11 +330,17 @@ export async function getCaseDetailData({
   const checks: CaseCheckRow[] =
     (((checkRows as
       | {
+          attempt_count: number;
           check_type: CaseCheckRow["check_type"];
           completed_at: string | null;
           error_text: string | null;
           id: string;
           result_json: {
+            dedupedAgainstExistingSource?: boolean;
+            email?: string;
+            errorCode?: CaseCheckRow["error_code"];
+            outcome?: CaseCheckRow["outcome"];
+            ownershipWindowStatus?: CaseCheckRow["ownership_window_status"];
             snippet?: string;
           } | null;
           source_url: string | null;
@@ -334,10 +349,21 @@ export async function getCaseDetailData({
       | null) ?? [])).map((row) => ({
       check_type: row.check_type,
       completed_at: row.completed_at,
+      attempt_count: row.attempt_count,
+      deduped_against_existing_source: Boolean(
+        row.result_json?.dedupedAgainstExistingSource,
+      ),
+      error_code: row.result_json?.errorCode ?? null,
       error_text: row.error_text,
       id: row.id,
+      outcome: row.result_json?.outcome ?? null,
+      ownership_window_status: row.result_json?.ownershipWindowStatus ?? null,
       result_summary:
-        typeof row.result_json?.snippet === "string" ? row.result_json.snippet : null,
+        typeof row.result_json?.snippet === "string"
+          ? row.result_json.snippet
+          : typeof row.result_json?.email === "string"
+            ? row.result_json.email
+            : null,
       source_url: row.source_url,
       status: row.status,
     }));

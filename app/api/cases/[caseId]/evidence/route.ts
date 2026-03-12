@@ -4,6 +4,7 @@ import { z } from "zod";
 import { logAuditEvent } from "@/lib/features/audit/server";
 import { requireAgencyRole } from "@/lib/features/auth/server";
 import {
+  MANUAL_CASE_EVIDENCE_TYPES,
   getScoreRule,
   type CaseEvidenceStrength,
   type CaseEvidenceType,
@@ -13,11 +14,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const metadataSchema = z.object({
   evidenceType: z.enum([
-    "manual_note",
-    "uploaded_file",
-    "public_web",
-    "company_site",
-    "recruiter_assertion",
+    ...MANUAL_CASE_EVIDENCE_TYPES,
   ]),
   snippetText: z.string().trim().max(5000).optional().or(z.literal("")),
   sourceUrl: z.string().trim().url().optional().or(z.literal("")),

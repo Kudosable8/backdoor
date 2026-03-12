@@ -4,6 +4,15 @@ export const CASE_EVIDENCE_TYPES = [
   "public_web",
   "company_site",
   "recruiter_assertion",
+  "email_signal",
+] as const;
+
+export const MANUAL_CASE_EVIDENCE_TYPES = [
+  "manual_note",
+  "uploaded_file",
+  "public_web",
+  "company_site",
+  "recruiter_assertion",
 ] as const;
 
 export const CASE_EVIDENCE_STRENGTHS = [
@@ -139,6 +148,32 @@ const SCORE_RULES: Record<
       ruleKey: "recruiter_assertion_conflicting",
     },
   },
+  email_signal: {
+    weak: {
+      delta: 6,
+      explanation:
+        "Validated company-email signal adds a weak supporting indication the candidate may be active at the client.",
+      ruleKey: "email_signal_weak",
+    },
+    medium: {
+      delta: 12,
+      explanation:
+        "Validated company-email signal adds a medium supporting indication tied to the client domain.",
+      ruleKey: "email_signal_medium",
+    },
+    strong: {
+      delta: 15,
+      explanation:
+        "Validated company-email signal adds a capped stronger indication tied to the client domain.",
+      ruleKey: "email_signal_strong",
+    },
+    conflicting: {
+      delta: -10,
+      explanation:
+        "Email verification signal conflicts with the current hire hypothesis.",
+      ruleKey: "email_signal_conflicting",
+    },
+  },
 };
 
 export function getScoreRule(
@@ -170,6 +205,7 @@ export const caseEvidenceTypeLabels: Record<CaseEvidenceType, string> = {
   public_web: "Public Web",
   company_site: "Company Site",
   recruiter_assertion: "Recruiter Assertion",
+  email_signal: "Email Signal",
 };
 
 export const caseEvidenceStrengthLabels: Record<CaseEvidenceStrength, string> = {
