@@ -2,9 +2,16 @@ import type { AgencyRole } from "@/lib/features/auth/types";
 import type { CaseConfidence, CaseStatus } from "@/lib/features/cases/types";
 
 export type DashboardStats = {
+  completedResearchChecks: number;
+  failedResearchChecks: number;
   highConfidenceCases: number;
   introductions: number;
+  matchedResearchChecksLast7Days: number;
+  noMatchResearchChecksLast7Days: number;
+  pendingResearchChecks: number;
   readyToContactCases: number;
+  recentResearchRunAt: string | null;
+  recentResearchRunsCount: number;
   sentOutreach: number;
   totalCases: number;
   totalImports: number;

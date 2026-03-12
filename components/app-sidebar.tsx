@@ -80,6 +80,10 @@ export function AppSidebar({
               agency.role === "finance"
                 ? [
                     {
+                      title: "Research",
+                      url: "/research",
+                    },
+                    {
                       title: "Audit",
                       url: "/audit",
                     },

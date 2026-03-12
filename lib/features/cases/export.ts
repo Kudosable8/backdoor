@@ -61,6 +61,11 @@ export function buildCaseExportMarkdown({
     `- Candidate location: ${caseItem.candidate_location ?? "Not provided"}`,
     `- Client website: ${caseItem.client_website ?? "Not provided"}`,
     `- Fee term reference: ${caseItem.fee_term_reference ?? "Not provided"}`,
+    `- Ownership window: ${
+      caseItem.ownership_window_days
+        ? `${caseItem.ownership_window_days} days (${caseItem.ownership_window_status.replaceAll("_", " ")})`
+        : "Not provided"
+    }`,
     "",
     "## Imported notes",
     caseItem.notes?.trim() || "No import notes provided.",

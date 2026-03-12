@@ -177,6 +177,9 @@ export async function POST(request: Request) {
           introduced_role_normalized: row.normalized.introduced_role_normalized,
           introduced_role_raw: row.normalized.introduced_role,
           notes: row.normalized.notes,
+          ownership_window_days: row.normalized.ownership_window_days
+            ? Number.parseInt(row.normalized.ownership_window_days, 10)
+            : null,
           recruiter_name: row.normalized.recruiter_name,
           submission_date: row.normalized.submission_date,
         })

@@ -6,8 +6,10 @@ import type {
 } from "./scoring";
 import type {
   CaseCheckStatus,
+  ResearchCheckOutcome,
   CaseCheckType,
   CaseResearchStatus,
+  ResearchErrorCode,
 } from "./research";
 
 export const CASE_STATUSES = [
@@ -91,6 +93,8 @@ export type CaseDetailRow = {
   introduced_role_raw: string;
   last_activity_at: string;
   notes: string | null;
+  ownership_window_days: number | null;
+  ownership_window_status: "unknown" | "within_window" | "outside_window";
   pending_check_count: number;
   completed_check_count: number;
   failed_check_count: number;
@@ -103,10 +107,15 @@ export type CaseDetailRow = {
 };
 
 export type CaseCheckRow = {
+  attempt_count: number;
   check_type: CaseCheckType;
   completed_at: string | null;
+  deduped_against_existing_source: boolean;
+  error_code: ResearchErrorCode | null;
   error_text: string | null;
   id: string;
+  outcome: ResearchCheckOutcome | null;
+  ownership_window_status: "unknown" | "within_window" | "outside_window" | null;
   result_summary: string | null;
   source_url: string | null;
   status: CaseCheckStatus;

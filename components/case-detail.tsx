@@ -33,7 +33,7 @@ import {
 } from "@/lib/features/cases/types";
 import {
   CASE_EVIDENCE_STRENGTHS,
-  CASE_EVIDENCE_TYPES,
+  MANUAL_CASE_EVIDENCE_TYPES,
   caseEvidenceStrengthLabels,
   caseEvidenceTypeLabels,
 } from "@/lib/features/cases/scoring";
@@ -41,6 +41,8 @@ import {
   caseCheckStatusLabels,
   caseCheckTypeLabels,
   caseResearchStatusLabels,
+  researchCheckOutcomeLabels,
+  researchErrorLabels,
 } from "@/lib/features/cases/research";
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
@@ -119,7 +121,7 @@ export function CaseDetail({
   const [status, setStatus] = useState<CaseDetailRow["status"]>(caseItem.status);
   const [assignedToUserId, setAssignedToUserId] = useState(caseItem.assigned_to_user_id ?? "unassigned");
   const [noteBody, setNoteBody] = useState("");
-  const [evidenceType, setEvidenceType] = useState<(typeof CASE_EVIDENCE_TYPES)[number]>("manual_note");
+  const [evidenceType, setEvidenceType] = useState<(typeof MANUAL_CASE_EVIDENCE_TYPES)[number]>("manual_note");
   const [strength, setStrength] = useState<(typeof CASE_EVIDENCE_STRENGTHS)[number]>("weak");
   const [summaryText, setSummaryText] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
@@ -437,6 +439,14 @@ export function CaseDetail({
                 <p className="text-muted-foreground">{caseItem.fee_term_reference ?? "Not provided"}</p>
               </div>
               <div className="space-y-1 text-sm">
+                <p className="font-medium">Ownership window</p>
+                <p className="text-muted-foreground">
+                  {caseItem.ownership_window_days
+                    ? `${caseItem.ownership_window_days} days (${caseItem.ownership_window_status.replaceAll("_", " ")})`
+                    : "Not provided"}
+                </p>
+              </div>
+              <div className="space-y-1 text-sm">
                 <p className="font-medium">Candidate LinkedIn</p>
                 <p className="text-muted-foreground">
                   {caseItem.candidate_linkedin_url ? (
@@ -505,6 +515,26 @@ export function CaseDetail({
                         check.error_text ??
                         "No automated finding recorded yet."}
                     </p>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      {check.outcome ? (
+                        <Badge variant="secondary">
+                          {researchCheckOutcomeLabels[check.outcome]}
+                        </Badge>
+                      ) : null}
+                      {check.error_code ? (
+                        <Badge variant="outline">
+                          {researchErrorLabels[check.error_code]}
+                        </Badge>
+                      ) : null}
+                      {check.ownership_window_status ? (
+                        <Badge variant="outline">
+                          Ownership {check.ownership_window_status.replaceAll("_", " ")}
+                        </Badge>
+                      ) : null}
+                      {check.deduped_against_existing_source ? (
+                        <Badge variant="outline">Duplicate source suppressed</Badge>
+                      ) : null}
+                    </div>
                     {check.source_url ? (
                       <a
                         className="mt-2 inline-block text-sm underline underline-offset-4"
@@ -550,13 +580,13 @@ export function CaseDetail({
                       <Label htmlFor="evidence-type">Evidence type</Label>
                       <Select
                         value={evidenceType}
-                        onValueChange={(value) => setEvidenceType(value as (typeof CASE_EVIDENCE_TYPES)[number])}
+                        onValueChange={(value) => setEvidenceType(value as (typeof MANUAL_CASE_EVIDENCE_TYPES)[number])}
                       >
                         <SelectTrigger id="evidence-type">
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
                         <SelectContent>
-                          {CASE_EVIDENCE_TYPES.map((value) => (
+                          {MANUAL_CASE_EVIDENCE_TYPES.map((value) => (
                             <SelectItem key={value} value={value}>
                               {caseEvidenceTypeLabels[value]}
                             </SelectItem>

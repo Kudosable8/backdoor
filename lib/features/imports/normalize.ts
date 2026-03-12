@@ -15,6 +15,33 @@ function normalizeText(value: string | null | undefined) {
     .trim();
 }
 
+const COMPANY_SUFFIXES = [
+  "limited",
+  "ltd",
+  "incorporated",
+  "inc",
+  "llc",
+  "plc",
+  "corp",
+  "corporation",
+  "co",
+  "company",
+  "holdings",
+  "holding",
+  "group",
+] as const;
+
+const ROLE_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/\bsr\b/g, "senior"],
+  [/\bjr\b/g, "junior"],
+  [/\bvp\b/g, "vice president"],
+  [/\bswe\b/g, "software engineer"],
+  [/\bsde\b/g, "software development engineer"],
+  [/\bcto\b/g, "chief technology officer"],
+  [/\bcfo\b/g, "chief financial officer"],
+  [/\bceo\b/g, "chief executive officer"],
+];
+
 function parseSubmissionDate(value: string) {
   const trimmedValue = value.trim();
 
@@ -49,6 +76,65 @@ function extractDomain(urlValue: string) {
   } catch {
     return null;
   }
+}
+
+function normalizeCompanyName(value: string) {
+  let normalized = normalizeText(value);
+
+  for (const suffix of COMPANY_SUFFIXES) {
+    normalized = normalized.replace(new RegExp(`\\b${suffix}\\b$`), "").trim();
+  }
+
+  return normalized.replace(/\s+/g, " ").trim();
+}
+
+function normalizeRoleTitle(value: string) {
+  let normalized = normalizeText(value);
+
+  for (const [pattern, replacement] of ROLE_REPLACEMENTS) {
+    normalized = normalized.replace(pattern, replacement);
+  }
+
+  return normalized.replace(/\s+/g, " ").trim();
+}
+
+function parseOwnershipWindowDays(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const match = normalized.match(/(\d+)\s*(day|days|week|weeks|month|months|mo|mos|year|years|yr|yrs)\b/);
+
+  if (!match) {
+    return null;
+  }
+
+  const amount = Number.parseInt(match[1] ?? "", 10);
+  const unit = match[2] ?? "";
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+
+  if (unit.startsWith("day")) {
+    return amount;
+  }
+
+  if (unit.startsWith("week")) {
+    return amount * 7;
+  }
+
+  if (unit.startsWith("month") || unit === "mo" || unit === "mos") {
+    return amount * 30;
+  }
+
+  if (unit.startsWith("year") || unit === "yr" || unit === "yrs") {
+    return amount * 365;
+  }
+
+  return null;
 }
 
 export function buildDedupeKey(input: {
@@ -92,8 +178,11 @@ export function buildImportPreview(args: {
     const clientCompanyName = getValue("client_company_name").trim();
     const submissionDate = parseSubmissionDate(getValue("submission_date"));
     const candidateNameNormalized = normalizeText(candidateFullName);
-    const clientCompanyNormalized = normalizeText(clientCompanyName);
-    const introducedRoleNormalized = normalizeText(introducedRole);
+    const clientCompanyNormalized = normalizeCompanyName(clientCompanyName);
+    const introducedRoleNormalized = normalizeRoleTitle(introducedRole);
+    const ownershipWindowDays = parseOwnershipWindowDays(
+      getValue("fee_term_reference"),
+    );
     const dedupeKey =
       candidateNameNormalized && clientCompanyNormalized
         ? buildDedupeKey({
@@ -113,6 +202,8 @@ export function buildImportPreview(args: {
     normalized.fee_term_reference = getValue("fee_term_reference").trim() || null;
     normalized.introduced_role = introducedRole || null;
     normalized.notes = getValue("notes").trim() || null;
+    normalized.ownership_window_days =
+      ownershipWindowDays !== null ? String(ownershipWindowDays) : null;
     normalized.recruiter_name = getValue("recruiter_name").trim() || null;
     normalized.submission_date = submissionDate;
 

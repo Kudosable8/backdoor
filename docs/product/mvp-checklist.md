@@ -78,6 +78,7 @@
 - [x] Add public-web search checks backed by Brave Search API
 - [x] Surface research status and run controls in case review UI
 - [x] Add background cron route for queued research execution
+- [x] Add research ops page with failed-check retry controls
 
 ## Phase 6: Audit trail and exports
 
