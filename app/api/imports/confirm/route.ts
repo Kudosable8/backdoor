@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/features/audit/server";
 import { requireAgencyRole } from "@/lib/features/auth/server";
+import { enqueueCaseResearchChecks } from "@/lib/features/cases/research";
 import { parseCsv } from "@/lib/features/imports/csv";
 import {
   buildDedupeKey,
@@ -229,6 +230,14 @@ export async function POST(request: Request) {
       .from("candidate_introductions")
       .update({ case_id: createdCase.id })
       .eq("id", createdIntroduction.id);
+
+    await enqueueCaseResearchChecks({
+      agencyId: appUser.agency.agencyId,
+      caseId: createdCase.id,
+      clientDomain: row.normalized.client_domain,
+      clientWebsite: row.normalized.client_website,
+      supabase: appUser.supabase,
+    });
 
     importedCount += 1;
     importRowsPayload.push({

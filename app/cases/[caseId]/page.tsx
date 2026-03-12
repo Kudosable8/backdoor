@@ -82,6 +82,7 @@ async function CaseDetailPageContent({ params }: CasePageProps) {
           <CaseDetail
             assignees={caseData.assignees}
             caseItem={caseData.caseItem}
+            checks={caseData.checks}
             currentUserRole={appUser.agency.role}
             evidenceItems={caseData.evidenceItems}
             outreachMessages={caseData.outreachMessages}

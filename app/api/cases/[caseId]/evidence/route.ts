@@ -4,12 +4,11 @@ import { z } from "zod";
 import { logAuditEvent } from "@/lib/features/audit/server";
 import { requireAgencyRole } from "@/lib/features/auth/server";
 import {
-  clampScore,
-  getScoreBand,
   getScoreRule,
   type CaseEvidenceStrength,
   type CaseEvidenceType,
 } from "@/lib/features/cases/scoring";
+import { recalculateCaseScore } from "@/lib/features/cases/research";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const metadataSchema = z.object({
@@ -147,36 +146,20 @@ export async function POST(request: Request, context: { params: Promise<{ caseId
     return NextResponse.json({ error: scoreEventError.message }, { status: 400 });
   }
 
-  const { data: evidenceRows, error: aggregateError } = await appUser.supabase
-    .from("case_evidence")
-    .select("score_delta")
-    .eq("agency_id", appUser.agency.agencyId)
-    .eq("case_id", caseId);
+  let scoreBand: "low" | "medium" | "high";
 
-  if (aggregateError) {
-    return NextResponse.json({ error: aggregateError.message }, { status: 400 });
-  }
-
-  const currentScore = clampScore(
-    (((evidenceRows as { score_delta: number }[] | null) ?? []).reduce(
-      (total, row) => total + row.score_delta,
-      0,
-    )),
-  );
-  const scoreBand = getScoreBand(currentScore);
-  const { error: caseUpdateError } = await appUser.supabase
-    .from("cases")
-    .update({
-      confidence: scoreBand,
-      current_score: currentScore,
-      last_activity_at: new Date().toISOString(),
-      score_band: scoreBand,
-    })
-    .eq("agency_id", appUser.agency.agencyId)
-    .eq("id", caseId);
-
-  if (caseUpdateError) {
-    return NextResponse.json({ error: caseUpdateError.message }, { status: 400 });
+  try {
+    const recalculated = await recalculateCaseScore({
+      agencyId: appUser.agency.agencyId,
+      caseId,
+      supabase: appUser.supabase,
+    });
+    scoreBand = recalculated.scoreBand;
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to recalculate case score" },
+      { status: 400 },
+    );
   }
 
   await logAuditEvent({

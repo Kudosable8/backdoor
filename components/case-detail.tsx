@@ -24,6 +24,7 @@ import {
   caseConfidenceLabels,
   caseStatusLabels,
   type CaseAssigneeOption,
+  type CaseCheckRow,
   type CaseDetailRow,
   type CaseEvidenceRow,
   type CaseScoreEventRow,
@@ -36,6 +37,11 @@ import {
   caseEvidenceStrengthLabels,
   caseEvidenceTypeLabels,
 } from "@/lib/features/cases/scoring";
+import {
+  caseCheckStatusLabels,
+  caseCheckTypeLabels,
+  caseResearchStatusLabels,
+} from "@/lib/features/cases/research";
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   dateStyle: "medium",
@@ -49,6 +55,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
 type CaseDetailProps = {
   assignees: CaseAssigneeOption[];
   caseItem: CaseDetailRow;
+  checks: CaseCheckRow[];
   currentUserRole: AgencyRole;
   evidenceItems: CaseEvidenceRow[];
   outreachMessages: OutreachMessageRow[];
@@ -95,6 +102,7 @@ function getTimelineBadgeVariant(kind: CaseTimelineItem["kind"]) {
 export function CaseDetail({
   assignees,
   caseItem,
+  checks,
   currentUserRole,
   evidenceItems,
   outreachMessages,
@@ -106,6 +114,7 @@ export function CaseDetail({
   const [isAddingNote, startNoteTransition] = useTransition();
   const [isAddingEvidence, startEvidenceTransition] = useTransition();
   const [isCreatingDraft, startDraftTransition] = useTransition();
+  const [isRunningResearch, startResearchTransition] = useTransition();
   const [sendingMessageId, setSendingMessageId] = useState<string | null>(null);
   const [status, setStatus] = useState<CaseDetailRow["status"]>(caseItem.status);
   const [assignedToUserId, setAssignedToUserId] = useState(caseItem.assigned_to_user_id ?? "unassigned");
@@ -122,6 +131,39 @@ export function CaseDetail({
   const canEdit = currentUserRole !== "read_only";
   const canExport = currentUserRole === "owner" || currentUserRole === "manager" || currentUserRole === "finance";
   const canSend = currentUserRole === "owner" || currentUserRole === "manager" || currentUserRole === "finance";
+
+  const handleRunResearch = () => {
+    startResearchTransition(async () => {
+      try {
+        const response = await fetch(`/api/cases/${caseItem.id}/research/run`, {
+          method: "POST",
+        });
+        const result = (await response.json().catch(() => null)) as {
+          error?: string;
+          summary?: {
+            evidenceCreated: number;
+            processed: number;
+          };
+        } | null;
+
+        if (!response.ok) {
+          throw new Error(result?.error ?? "Unable to run case research");
+        }
+
+        toast.success("Case research finished", {
+          description:
+            result?.summary?.processed
+              ? `${result.summary.processed} checks processed, ${result.summary.evidenceCreated} evidence items created.`
+              : "No queued checks were available for this case.",
+        });
+        router.refresh();
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Unable to run case research",
+        );
+      }
+    });
+  };
 
   const handleSave = () => {
     startSaveTransition(async () => {
@@ -289,6 +331,11 @@ export function CaseDetail({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {canEdit ? (
+            <Button type="button" variant="secondary" onClick={handleRunResearch} disabled={isRunningResearch}>
+              {isRunningResearch ? "Running research..." : "Run research"}
+            </Button>
+          ) : null}
           {canExport ? (
             <Button asChild type="button" variant="secondary">
               <a href={`/api/cases/${caseItem.id}/export`}>Export proof pack</a>
@@ -324,6 +371,12 @@ export function CaseDetail({
         </Card>
         <Card>
           <CardHeader className="gap-1">
+            <CardDescription>Research checks</CardDescription>
+            <CardTitle className="text-3xl">{checks.length}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="gap-1">
             <CardDescription>Outreach drafts</CardDescription>
             <CardTitle className="text-3xl">{outreachMessages.length}</CardTitle>
           </CardHeader>
@@ -338,6 +391,21 @@ export function CaseDetail({
               <CardDescription>Imported introduction data driving this investigation.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1 text-sm">
+                <p className="font-medium">Research status</p>
+                <p className="text-muted-foreground">
+                  {caseResearchStatusLabels[caseItem.research_status]}
+                  {caseItem.researched_at
+                    ? ` • Last run ${dateTimeFormatter.format(new Date(caseItem.researched_at))}`
+                    : ""}
+                </p>
+              </div>
+              <div className="space-y-1 text-sm">
+                <p className="font-medium">Research queue</p>
+                <p className="text-muted-foreground">
+                  {caseItem.pending_check_count} pending • {caseItem.completed_check_count} completed • {caseItem.failed_check_count} failed
+                </p>
+              </div>
               <div className="space-y-1 text-sm">
                 <p className="font-medium">Client</p>
                 <p className="text-muted-foreground">{caseItem.client_company_raw}</p>
@@ -412,6 +480,48 @@ export function CaseDetail({
                   {dateTimeFormatter.format(new Date(caseItem.last_activity_at))}
                 </p>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Automated research</CardTitle>
+              <CardDescription>
+                Company-site checks queued or completed for this case.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              {checks.length > 0 ? (
+                checks.map((check) => (
+                  <div key={check.id} className="rounded-lg border p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium">{caseCheckTypeLabels[check.check_type]}</p>
+                      <Badge variant={check.status === "completed" ? "secondary" : check.status === "failed" ? "outline" : "default"}>
+                        {caseCheckStatusLabels[check.status]}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {check.result_summary ??
+                        check.error_text ??
+                        "No automated finding recorded yet."}
+                    </p>
+                    {check.source_url ? (
+                      <a
+                        className="mt-2 inline-block text-sm underline underline-offset-4"
+                        href={check.source_url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Open checked page
+                      </a>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No automated checks have been queued for this case yet.
+                </p>
+              )}
             </CardContent>
           </Card>
 

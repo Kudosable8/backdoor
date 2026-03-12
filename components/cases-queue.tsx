@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { FilterX, Search } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +40,7 @@ import {
   caseStatusLabels,
   type CaseQueueRow,
 } from "@/lib/features/cases/types";
+import { caseResearchStatusLabels } from "@/lib/features/cases/research";
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   dateStyle: "medium",
@@ -77,6 +80,8 @@ function getConfidenceVariant(confidence: CaseQueueRow["confidence"]) {
 }
 
 export function CasesQueue({ rows }: CasesQueueProps) {
+  const router = useRouter();
+  const [isRunningResearch, startResearchTransition] = useTransition();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<string>("all");
   const [confidence, setConfidence] = useState<string>("all");
@@ -141,11 +146,45 @@ export function CasesQueue({ rows }: CasesQueueProps) {
   const summary = useMemo(() => {
     return {
       highConfidence: rows.filter((row) => row.confidence === "high").length,
+      pendingResearch: rows.filter((row) => row.pending_check_count > 0).length,
       readyToContact: rows.filter((row) => row.status === "ready_to_contact").length,
       total: rows.length,
       unassigned: rows.filter((row) => !row.assigned_to_user_id).length,
     };
   }, [rows]);
+
+  const handleRunResearch = () => {
+    startResearchTransition(async () => {
+      try {
+        const response = await fetch("/api/cases/research/run", {
+          method: "POST",
+        });
+        const result = (await response.json().catch(() => null)) as {
+          error?: string;
+          summary?: {
+            evidenceCreated: number;
+            processed: number;
+          };
+        } | null;
+
+        if (!response.ok) {
+          throw new Error(result?.error ?? "Unable to run queued research");
+        }
+
+        toast.success("Research run finished", {
+          description:
+            result?.summary?.processed
+              ? `${result.summary.processed} checks processed, ${result.summary.evidenceCreated} evidence items created.`
+              : "No queued checks were available.",
+        });
+        router.refresh();
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Unable to run queued research",
+        );
+      }
+    });
+  };
 
   const resetFilters = () => {
     setClient("");
@@ -159,7 +198,7 @@ export function CasesQueue({ rows }: CasesQueueProps) {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="gap-1">
             <CardDescription>Total cases</CardDescription>
@@ -184,14 +223,32 @@ export function CasesQueue({ rows }: CasesQueueProps) {
             <CardTitle className="text-3xl">{summary.unassigned}</CardTitle>
           </CardHeader>
         </Card>
+        <Card>
+          <CardHeader className="gap-1">
+            <CardDescription>Research queued</CardDescription>
+            <CardTitle className="text-3xl">{summary.pendingResearch}</CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Review queue</CardTitle>
-          <CardDescription>
-            Filter active backdoor-hire investigations by status, recruiter, client, and submission date.
-          </CardDescription>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle>Review queue</CardTitle>
+              <CardDescription>
+                Filter active backdoor-hire investigations by status, recruiter, client, and submission date.
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={isRunningResearch}
+              onClick={handleRunResearch}
+            >
+              {isRunningResearch ? "Running research..." : "Run queued research"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -301,6 +358,7 @@ export function CasesQueue({ rows }: CasesQueueProps) {
                     <TableHead>Role</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Confidence</TableHead>
+                    <TableHead>Research</TableHead>
                     <TableHead>Recruiter</TableHead>
                     <TableHead>Assignee</TableHead>
                     <TableHead>Submission</TableHead>
@@ -326,6 +384,18 @@ export function CasesQueue({ rows }: CasesQueueProps) {
                         <Badge variant={getConfidenceVariant(row.confidence)}>
                           {caseConfidenceLabels[row.confidence]}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-sm font-medium">
+                            {caseResearchStatusLabels[row.research_status]}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {row.pending_check_count > 0
+                              ? `${row.pending_check_count} queued`
+                              : "No queued checks"}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell>{row.recruiter_name ?? "Unassigned"}</TableCell>
                       <TableCell>{row.assigned_to_user_name ?? "Unassigned"}</TableCell>

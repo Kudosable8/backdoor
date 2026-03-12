@@ -35,7 +35,7 @@ async function CasesPageContent() {
   const { data: caseRows, error: casesError } = await supabase
     .from("cases")
     .select(
-      "id, candidate_introduction_id, status, confidence, assigned_to_user_id, created_at, last_activity_at, candidate_introductions!cases_candidate_introduction_id_fkey(id, candidate_full_name, client_company_raw, introduced_role_raw, recruiter_name, submission_date)",
+      "id, candidate_introduction_id, status, confidence, assigned_to_user_id, created_at, last_activity_at, research_status, candidate_introductions!cases_candidate_introduction_id_fkey(id, candidate_full_name, client_company_raw, introduced_role_raw, recruiter_name, submission_date)",
     )
     .eq("agency_id", agency.agencyId)
     .order("last_activity_at", { ascending: false });
@@ -71,22 +71,34 @@ async function CasesPageContent() {
           created_at: string;
           id: string;
           last_activity_at: string;
+          research_status: CaseQueueRow["research_status"];
           status: CaseQueueRow["status"];
         }[]
       | null) ?? [];
+  const caseIds = rawCases.map((row) => row.id);
   const assigneeIds = Array.from(
     new Set(rawCases.map((row) => row.assigned_to_user_id).filter((value): value is string => Boolean(value))),
   );
   const adminClient = createAdminClient();
-  const { data: profileRows, error: profilesError } = assigneeIds.length
-    ? await adminClient
-        .from("profiles")
-        .select("id, full_name, first_name, last_name")
-        .in("id", assigneeIds)
-    : { data: [], error: null };
+  const [{ data: profileRows, error: profilesError }, { data: checkRows, error: checksError }] =
+    await Promise.all([
+      assigneeIds.length
+        ? adminClient
+            .from("profiles")
+            .select("id, full_name, first_name, last_name")
+            .in("id", assigneeIds)
+        : Promise.resolve({ data: [], error: null }),
+      caseIds.length
+        ? supabase
+            .from("case_checks")
+            .select("case_id, status")
+            .eq("agency_id", agency.agencyId)
+            .in("case_id", caseIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
 
-  if (profilesError) {
-    throw new Error(profilesError.message);
+  if (profilesError || checksError) {
+    throw new Error(profilesError?.message ?? checksError?.message);
   }
   const profileMap = new Map(
     (((profileRows as
@@ -105,6 +117,22 @@ async function CasesPageContent() {
       return [row.id, derivedName];
     }),
   );
+  const pendingCheckCountByCaseId = new Map<string, number>();
+
+  for (const row of ((checkRows as
+    | {
+        case_id: string;
+        status: "completed" | "failed" | "pending" | "processing" | "skipped";
+      }[]
+    | null) ?? [])) {
+    if (row.status === "pending" || row.status === "processing") {
+      pendingCheckCountByCaseId.set(
+        row.case_id,
+        (pendingCheckCountByCaseId.get(row.case_id) ?? 0) + 1,
+      );
+    }
+  }
+
   const rows: CaseQueueRow[] = rawCases
     .map((row) => {
       const introduction = Array.isArray(row.candidate_introductions)
@@ -127,6 +155,8 @@ async function CasesPageContent() {
         id: row.id,
         introduced_role_raw: introduction.introduced_role_raw,
         last_activity_at: row.last_activity_at,
+        pending_check_count: pendingCheckCountByCaseId.get(row.id) ?? 0,
+        research_status: row.research_status,
         recruiter_name: introduction.recruiter_name,
         status: row.status,
         submission_date: introduction.submission_date,
