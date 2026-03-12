@@ -55,6 +55,16 @@ type CasesQueueProps = {
   rows: CaseQueueRow[];
 };
 
+const EMAIL_LOOKUP_FILTER_OPTIONS = [
+  "deliverable_found",
+  "no_match",
+  "queued",
+  "running",
+  "needs_review",
+  "missing_source",
+  "not_started",
+] as const;
+
 function getStatusVariant(status: CaseQueueRow["status"]) {
   if (status === "ready_to_contact") {
     return "default";
@@ -79,12 +89,41 @@ function getConfidenceVariant(confidence: CaseQueueRow["confidence"]) {
   return "outline";
 }
 
+function getEmailLookupBadge(status: CaseQueueRow["email_lookup_status"]) {
+  if (status === "deliverable_found") {
+    return { label: "Deliverable email", variant: "default" as const };
+  }
+
+  if (status === "no_match") {
+    return { label: "No email", variant: "secondary" as const };
+  }
+
+  if (status === "queued") {
+    return { label: "Email queued", variant: "secondary" as const };
+  }
+
+  if (status === "running") {
+    return { label: "Email running", variant: "secondary" as const };
+  }
+
+  if (status === "needs_review") {
+    return { label: "Email needs review", variant: "outline" as const };
+  }
+
+  if (status === "missing_source") {
+    return { label: "Email missing source", variant: "outline" as const };
+  }
+
+  return { label: "Email not started", variant: "outline" as const };
+}
+
 export function CasesQueue({ rows }: CasesQueueProps) {
   const router = useRouter();
   const [isRunningResearch, startResearchTransition] = useTransition();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<string>("all");
   const [confidence, setConfidence] = useState<string>("all");
+  const [emailStatus, setEmailStatus] = useState<string>("all");
   const [recruiter, setRecruiter] = useState<string>("all");
   const [client, setClient] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -108,6 +147,10 @@ export function CasesQueue({ rows }: CasesQueueProps) {
       }
 
       if (confidence !== "all" && row.confidence !== confidence) {
+        return false;
+      }
+
+      if (emailStatus !== "all" && row.email_lookup_status !== emailStatus) {
         return false;
       }
 
@@ -141,10 +184,11 @@ export function CasesQueue({ rows }: CasesQueueProps) {
         .toLowerCase()
         .includes(normalizedQuery);
     });
-  }, [client, confidence, dateFrom, dateTo, query, recruiter, rows, status]);
+  }, [client, confidence, dateFrom, dateTo, emailStatus, query, recruiter, rows, status]);
 
   const summary = useMemo(() => {
     return {
+      deliverableEmail: rows.filter((row) => row.email_lookup_status === "deliverable_found").length,
       highConfidence: rows.filter((row) => row.confidence === "high").length,
       pendingResearch: rows.filter((row) => row.pending_check_count > 0).length,
       readyToContact: rows.filter((row) => row.status === "ready_to_contact").length,
@@ -191,6 +235,7 @@ export function CasesQueue({ rows }: CasesQueueProps) {
     setConfidence("all");
     setDateFrom("");
     setDateTo("");
+    setEmailStatus("all");
     setQuery("");
     setRecruiter("all");
     setStatus("all");
@@ -198,7 +243,7 @@ export function CasesQueue({ rows }: CasesQueueProps) {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         <Card>
           <CardHeader className="gap-1">
             <CardDescription>Total cases</CardDescription>
@@ -229,6 +274,12 @@ export function CasesQueue({ rows }: CasesQueueProps) {
             <CardTitle className="text-3xl">{summary.pendingResearch}</CardTitle>
           </CardHeader>
         </Card>
+        <Card>
+          <CardHeader className="gap-1">
+            <CardDescription>Deliverable email</CardDescription>
+            <CardTitle className="text-3xl">{summary.deliverableEmail}</CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
       <Card>
@@ -251,7 +302,7 @@ export function CasesQueue({ rows }: CasesQueueProps) {
           </div>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <div className="grid gap-2">
               <Label htmlFor="case-query">Search</Label>
               <div className="relative">
@@ -314,6 +365,22 @@ export function CasesQueue({ rows }: CasesQueueProps) {
               </Select>
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="case-email-status">Email status</Label>
+              <Select value={emailStatus} onValueChange={setEmailStatus}>
+                <SelectTrigger id="case-email-status">
+                  <SelectValue placeholder="All email statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All email statuses</SelectItem>
+                  {EMAIL_LOOKUP_FILTER_OPTIONS.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {getEmailLookupBadge(value).label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="case-client">Client</Label>
               <Input
                 id="case-client"
@@ -350,7 +417,7 @@ export function CasesQueue({ rows }: CasesQueueProps) {
 
           <div className="overflow-x-auto">
             {filteredRows.length > 0 ? (
-              <Table className="min-w-[960px]">
+              <Table className="min-w-[1080px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Candidate</TableHead>
@@ -359,6 +426,7 @@ export function CasesQueue({ rows }: CasesQueueProps) {
                     <TableHead>Status</TableHead>
                     <TableHead>Confidence</TableHead>
                     <TableHead>Research</TableHead>
+                    <TableHead>Email</TableHead>
                     <TableHead>Recruiter</TableHead>
                     <TableHead>Assignee</TableHead>
                     <TableHead>Submission</TableHead>
@@ -396,6 +464,11 @@ export function CasesQueue({ rows }: CasesQueueProps) {
                               : "No queued checks"}
                           </span>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getEmailLookupBadge(row.email_lookup_status).variant}>
+                          {getEmailLookupBadge(row.email_lookup_status).label}
+                        </Badge>
                       </TableCell>
                       <TableCell>{row.recruiter_name ?? "Unassigned"}</TableCell>
                       <TableCell>{row.assigned_to_user_name ?? "Unassigned"}</TableCell>

@@ -12,6 +12,34 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   timeStyle: "short",
 });
 
+function getEmailLookupBadge(status: DashboardViewModel["recentCases"][number]["email_lookup_status"]) {
+  if (status === "deliverable_found") {
+    return { label: "Deliverable email", variant: "default" as const };
+  }
+
+  if (status === "no_match") {
+    return { label: "No email", variant: "secondary" as const };
+  }
+
+  if (status === "queued") {
+    return { label: "Email queued", variant: "secondary" as const };
+  }
+
+  if (status === "running") {
+    return { label: "Email running", variant: "secondary" as const };
+  }
+
+  if (status === "needs_review") {
+    return { label: "Email review", variant: "outline" as const };
+  }
+
+  if (status === "missing_source") {
+    return { label: "Email missing source", variant: "outline" as const };
+  }
+
+  return { label: "Email not started", variant: "outline" as const };
+}
+
 export function DashboardView({
   agencyName,
   email,
@@ -114,6 +142,15 @@ export function DashboardView({
 
         <Card>
           <CardHeader>
+            <CardTitle>Deliverable email</CardTitle>
+          </CardHeader>
+          <CardContent className="text-3xl font-semibold">
+            {stats.deliverableEmailCases}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Assigned to you</CardTitle>
           </CardHeader>
           <CardContent className="text-3xl font-semibold">
@@ -178,6 +215,9 @@ export function DashboardView({
                       <Badge variant="outline">{caseStatusLabels[caseRow.status]}</Badge>
                       <Badge variant="secondary">
                         {caseRow.current_score} / {caseConfidenceLabels[caseRow.score_band]}
+                      </Badge>
+                      <Badge variant={getEmailLookupBadge(caseRow.email_lookup_status).variant}>
+                        {getEmailLookupBadge(caseRow.email_lookup_status).label}
                       </Badge>
                     </div>
                   </div>
